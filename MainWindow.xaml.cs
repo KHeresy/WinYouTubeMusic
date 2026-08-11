@@ -19,9 +19,7 @@ namespace WinYotuTubeMusic
         private IntPtr _hwnd;
         private SmtcService? _smtcService;
         private bool _isPlaying = false;
-        private bool _isAlwaysOnTop = false;
         private static bool _enableLog = false;
-        private readonly HttpClient _httpClient = new HttpClient();
 
         [DllImport("dwmapi.dll")]
         private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
@@ -38,7 +36,6 @@ namespace WinYotuTubeMusic
             InitTaskbarThumbIcons();
 
             this.Loaded += MainWindow_Loaded;
-            this.SizeChanged += (s, e) => UpdateTaskbarThumbnailClip();
         }
 
         private void ParseCommandLineArgs()
@@ -74,8 +71,6 @@ namespace WinYotuTubeMusic
                 LogWebView("SMTC init error: " + ex.Message);
             }
 
-            UpdateTaskbarThumbnailClip();
-
             // Initialize WebView2 & Navigate
             _ = InitializeWebViewAsync();
         }
@@ -108,27 +103,6 @@ namespace WinYotuTubeMusic
             }
         }
 
-        private void UpdateTaskbarThumbnailClip()
-        {
-            try
-            {
-                if (AlbumCoverBorder.ActualWidth > 0 && AlbumCoverBorder.ActualHeight > 0)
-                {
-                    Point pos = AlbumCoverBorder.TransformToAncestor(this).Transform(new Point(0, 0));
-                    TaskbarInfo.ThumbnailClipMargin = new Thickness(
-                        pos.X,
-                        pos.Y,
-                        Math.Max(0, this.ActualWidth - (pos.X + AlbumCoverBorder.ActualWidth)),
-                        Math.Max(0, this.ActualHeight - (pos.Y + AlbumCoverBorder.ActualHeight))
-                    );
-                }
-            }
-            catch (Exception ex)
-            {
-                LogWebView("UpdateTaskbarThumbnailClip error: " + ex.Message);
-            }
-        }
-
         private async Task InitializeWebViewAsync()
         {
             try
@@ -139,20 +113,35 @@ namespace WinYotuTubeMusic
                 var options = new CoreWebView2EnvironmentOptions();
                 options.AdditionalBrowserArguments = "--disable-gpu --disable-gpu-compositing";
 
-                CoreWebView2Environment env;
-                try
+                CoreWebView2Environment? env = null;
+                int retries = 3;
+
+                while (retries > 0)
                 {
-                    LogWebView("Creating CoreWebView2Environment at: " + userFolder);
-                    env = await CoreWebView2Environment.CreateAsync(userDataFolder: userFolder, options: options);
-                    await YtmWebView.EnsureCoreWebView2Async(env);
-                }
-                catch (COMException comEx) when ((uint)comEx.HResult == 0x800700AA)
-                {
-                    LogWebView("Primary WebViewData folder locked (0x800700AA). Switching to fallback session profile...");
-                    string fallbackFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "WinYouTubeMusic", $"Session_{Environment.ProcessId}");
-                    Directory.CreateDirectory(fallbackFolder);
-                    env = await CoreWebView2Environment.CreateAsync(userDataFolder: fallbackFolder, options: options);
-                    await YtmWebView.EnsureCoreWebView2Async(env);
+                    try
+                    {
+                        LogWebView("Creating CoreWebView2Environment at: " + userFolder);
+                        env = await CoreWebView2Environment.CreateAsync(userDataFolder: userFolder, options: options);
+                        await YtmWebView.EnsureCoreWebView2Async(env);
+                        break;
+                    }
+                    catch (COMException comEx) when ((uint)comEx.HResult == 0x800700AA)
+                    {
+                        retries--;
+                        LogWebView($"Primary WebViewData folder locked (0x800700AA). Retrying... ({retries} left)");
+                        if (retries > 0)
+                        {
+                            await Task.Delay(500);
+                        }
+                        else
+                        {
+                            string persistentFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "WinYouTubeMusic", "ProfileData");
+                            Directory.CreateDirectory(persistentFolder);
+                            LogWebView("Switching to persistent profile: " + persistentFolder);
+                            env = await CoreWebView2Environment.CreateAsync(userDataFolder: persistentFolder, options: options);
+                            await YtmWebView.EnsureCoreWebView2Async(env);
+                        }
+                    }
                 }
 
                 LogWebView("CoreWebView2 ensured successfully!");
@@ -186,7 +175,6 @@ namespace WinYotuTubeMusic
         {
             LogWebView($"Navigation completed. IsSuccess={e.IsSuccess}, WebErrorStatus={e.WebErrorStatus}, Uri={YtmWebView.Source}");
             YtmWebView.Visibility = Visibility.Visible;
-            UpdateTaskbarThumbnailClip();
         }
 
         private void YtmWebView_ProcessFailed(object? sender, CoreWebView2ProcessFailedEventArgs e)
@@ -211,9 +199,6 @@ namespace WinYotuTubeMusic
 
                     _isPlaying = isPlaying;
 
-                    TxtSongTitle.Text = !string.IsNullOrWhiteSpace(title) ? title : "YouTube Music";
-                    TxtArtistName.Text = !string.IsNullOrWhiteSpace(artist) ? artist : "尚未播放曲目";
-
                     if (!string.IsNullOrWhiteSpace(title))
                     {
                         Title = $"{title} - {artist} | YouTube Music";
@@ -223,47 +208,50 @@ namespace WinYotuTubeMusic
                         Title = "YouTube Music";
                     }
 
-                    if (!string.IsNullOrWhiteSpace(artwork))
-                    {
-                        _ = LoadAlbumArtworkAsync(artwork);
-                    }
-
                     if (_smtcService != null)
                     {
                         await _smtcService.UpdateMetadataAsync(title, artist, artwork, isPlaying);
                     }
 
                     UpdateTaskbarPlayIcon(isPlaying);
-                    UpdateTaskbarThumbnailClip();
+
+                    // Dynamically calculate window-relative Taskbar thumbnail clip bounds
+                    if (root.TryGetProperty("bounds", out var boundsEl) && boundsEl.ValueKind == JsonValueKind.Object)
+                    {
+                        try
+                        {
+                            double bLeft = boundsEl.GetProperty("left").GetDouble();
+                            double bTop = boundsEl.GetProperty("top").GetDouble();
+                            double bWidth = boundsEl.GetProperty("width").GetDouble();
+                            double bHeight = boundsEl.GetProperty("height").GetDouble();
+
+                            if (bWidth > 20 && bHeight > 20)
+                            {
+                                Dispatcher.Invoke(() =>
+                                {
+                                    try
+                                    {
+                                        Point webViewOffset = YtmWebView.TransformToAncestor(this).Transform(new Point(0, 0));
+                                        double absLeft = webViewOffset.X + bLeft;
+                                        double absTop = webViewOffset.Y + bTop;
+                                        double absRight = Math.Max(0, this.ActualWidth - (absLeft + bWidth));
+                                        double absBottom = Math.Max(0, this.ActualHeight - (absTop + bHeight));
+
+                                        TaskbarInfo.ThumbnailClipMargin = new Thickness(absLeft, absTop, absRight, absBottom);
+                                        LogWebView($"TaskbarInfo.ThumbnailClipMargin set to: {TaskbarInfo.ThumbnailClipMargin}");
+                                    }
+                                    catch { }
+                                });
+                            }
+                        }
+                        catch { }
+                    }
                 }
             }
             catch (Exception ex)
             {
                 LogWebView("WebMessage parse error: " + ex.Message);
             }
-        }
-
-        private async Task LoadAlbumArtworkAsync(string url)
-        {
-            try
-            {
-                byte[] data = await _httpClient.GetByteArrayAsync(url);
-                using MemoryStream ms = new MemoryStream(data);
-                BitmapImage bitmap = new BitmapImage();
-                bitmap.BeginInit();
-                bitmap.CacheOption = BitmapCacheOption.OnLoad;
-                bitmap.StreamSource = ms;
-                bitmap.EndInit();
-                bitmap.Freeze();
-
-                Dispatcher.Invoke(() =>
-                {
-                    AlbumCoverImage.Source = bitmap;
-                    PlaceholderIcon.Visibility = Visibility.Collapsed;
-                    UpdateTaskbarThumbnailClip();
-                });
-            }
-            catch { }
         }
 
         public void SendCommandToWeb(string cmd)
@@ -293,61 +281,6 @@ namespace WinYotuTubeMusic
         {
             LogWebView("BtnNextTaskbar_Click triggered");
             SendCommandToWeb("next");
-        }
-
-        private void BtnBack_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                if (YtmWebView.CoreWebView2 != null && YtmWebView.CanGoBack)
-                {
-                    YtmWebView.GoBack();
-                }
-            }
-            catch (Exception ex)
-            {
-                LogWebView("BtnBack_Click error: " + ex.Message);
-            }
-        }
-
-        private void BtnForward_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                if (YtmWebView.CoreWebView2 != null && YtmWebView.CanGoForward)
-                {
-                    YtmWebView.GoForward();
-                }
-            }
-            catch (Exception ex)
-            {
-                LogWebView("BtnForward_Click error: " + ex.Message);
-            }
-        }
-
-        private void BtnReload_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                if (YtmWebView.CoreWebView2 != null)
-                {
-                    YtmWebView.Reload();
-                }
-                else
-                {
-                    _ = InitializeWebViewAsync();
-                }
-            }
-            catch (Exception ex)
-            {
-                LogWebView("BtnReload_Click error: " + ex.Message);
-            }
-        }
-
-        private void BtnAlwaysOnTop_Click(object sender, RoutedEventArgs e)
-        {
-            _isAlwaysOnTop = !_isAlwaysOnTop;
-            Topmost = _isAlwaysOnTop;
         }
 
         private void LogWebView(string msg)
