@@ -1,81 +1,92 @@
 using System.Windows;
 using System.Windows.Media;
 
-namespace WinYotuTubeMusic.Native;
-
-public static class WpfIconHelper
+namespace WinYouTubeMusic.Native
 {
-    public static ImageSource CreatePlayIcon(bool isPlaying)
+    public static class WpfIconHelper
     {
-        DrawingGroup group = new DrawingGroup();
-        using (DrawingContext dc = group.Open())
+        public static DrawingImage CreatePreviousIcon()
         {
-            // Canvas bounds
-            dc.DrawRectangle(Brushes.Transparent, null, new Rect(0, 0, 24, 24));
+            var group = new DrawingGroup();
+            using (var dc = group.Open())
+            {
+                var brush = new SolidColorBrush(Color.FromRgb(240, 240, 240));
+                brush.Freeze();
 
-            Brush brush = Brushes.White;
-            if (isPlaying)
-            {
-                // Pause Icon: two vertical bars
-                dc.DrawRectangle(brush, null, new Rect(6, 4, 4, 16));
-                dc.DrawRectangle(brush, null, new Rect(14, 4, 4, 16));
-            }
-            else
-            {
-                // Play Icon: triangle
-                StreamGeometry geometry = new StreamGeometry();
-                using (StreamGeometryContext ctx = geometry.Open())
-                {
-                    ctx.BeginFigure(new Point(7, 4), true, true);
-                    ctx.LineTo(new Point(19, 12), true, false);
-                    ctx.LineTo(new Point(7, 20), true, false);
-                }
+                // Left bar
+                dc.DrawRectangle(brush, null, new Rect(4, 5, 3, 14));
+
+                // Left triangle
+                var geometry = new PathGeometry();
+                var figure = new PathFigure { StartPoint = new Point(19, 5) };
+                figure.Segments.Add(new LineSegment(new Point(9, 12), true));
+                figure.Segments.Add(new LineSegment(new Point(19, 19), true));
+                figure.IsClosed = true;
+                geometry.Figures.Add(figure);
+                geometry.Freeze();
+
                 dc.DrawGeometry(brush, null, geometry);
             }
+            group.Freeze();
+            return new DrawingImage(group);
         }
-        return new DrawingImage(group);
-    }
 
-    public static ImageSource CreatePreviousIcon()
-    {
-        DrawingGroup group = new DrawingGroup();
-        using (DrawingContext dc = group.Open())
+        public static DrawingImage CreatePlayIcon(bool isPlaying)
         {
-            dc.DrawRectangle(Brushes.Transparent, null, new Rect(0, 0, 24, 24));
-
-            Brush brush = Brushes.White;
-            dc.DrawRectangle(brush, null, new Rect(4, 4, 3, 16));
-
-            StreamGeometry geometry = new StreamGeometry();
-            using (StreamGeometryContext ctx = geometry.Open())
+            var group = new DrawingGroup();
+            using (var dc = group.Open())
             {
-                ctx.BeginFigure(new Point(19, 4), true, true);
-                ctx.LineTo(new Point(9, 12), true, false);
-                ctx.LineTo(new Point(19, 20), true, false);
-            }
-            dc.DrawGeometry(brush, null, geometry);
-        }
-        return new DrawingImage(group);
-    }
+                var brush = new SolidColorBrush(Color.FromRgb(240, 240, 240));
+                brush.Freeze();
 
-    public static ImageSource CreateNextIcon()
-    {
-        DrawingGroup group = new DrawingGroup();
-        using (DrawingContext dc = group.Open())
+                if (isPlaying)
+                {
+                    // Pause: Two vertical bars
+                    dc.DrawRectangle(brush, null, new Rect(6, 5, 4, 14));
+                    dc.DrawRectangle(brush, null, new Rect(14, 5, 4, 14));
+                }
+                else
+                {
+                    // Play: Triangle facing right
+                    var geometry = new PathGeometry();
+                    var figure = new PathFigure { StartPoint = new Point(7, 5) };
+                    figure.Segments.Add(new LineSegment(new Point(18, 12), true));
+                    figure.Segments.Add(new LineSegment(new Point(7, 19), true));
+                    figure.IsClosed = true;
+                    geometry.Figures.Add(figure);
+                    geometry.Freeze();
+
+                    dc.DrawGeometry(brush, null, geometry);
+                }
+            }
+            group.Freeze();
+            return new DrawingImage(group);
+        }
+
+        public static DrawingImage CreateNextIcon()
         {
-            dc.DrawRectangle(Brushes.Transparent, null, new Rect(0, 0, 24, 24));
-
-            Brush brush = Brushes.White;
-            StreamGeometry geometry = new StreamGeometry();
-            using (StreamGeometryContext ctx = geometry.Open())
+            var group = new DrawingGroup();
+            using (var dc = group.Open())
             {
-                ctx.BeginFigure(new Point(5, 4), true, true);
-                ctx.LineTo(new Point(15, 12), true, false);
-                ctx.LineTo(new Point(5, 20), true, false);
+                var brush = new SolidColorBrush(Color.FromRgb(240, 240, 240));
+                brush.Freeze();
+
+                // Right triangle
+                var geometry = new PathGeometry();
+                var figure = new PathFigure { StartPoint = new Point(5, 5) };
+                figure.Segments.Add(new LineSegment(new Point(15, 12), true));
+                figure.Segments.Add(new LineSegment(new Point(5, 19), true));
+                figure.IsClosed = true;
+                geometry.Figures.Add(figure);
+                geometry.Freeze();
+
+                dc.DrawGeometry(brush, null, geometry);
+
+                // Right bar
+                dc.DrawRectangle(brush, null, new Rect(17, 5, 3, 14));
             }
-            dc.DrawGeometry(brush, null, geometry);
-            dc.DrawRectangle(brush, null, new Rect(16, 4, 3, 16));
+            group.Freeze();
+            return new DrawingImage(group);
         }
-        return new DrawingImage(group);
     }
 }

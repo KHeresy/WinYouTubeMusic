@@ -9,10 +9,10 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Microsoft.Web.WebView2.Core;
-using WinYotuTubeMusic.Native;
-using WinYotuTubeMusic.Services;
+using WinYouTubeMusic.Native;
+using WinYouTubeMusic.Services;
 
-namespace WinYotuTubeMusic
+namespace WinYouTubeMusic
 {
     public partial class MainWindow : Window
     {

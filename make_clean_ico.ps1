@@ -1,9 +1,9 @@
 Add-Type -AssemblyName System.Drawing
 
-$basePath = "D:\Program\WinYotuTubeMusic\microsoft.png"
-$ytmPath = "D:\Program\WinYotuTubeMusic\ytmusic.png"
-$outputPath = "D:\Program\WinYotuTubeMusic\ytmusic.ico"
-$previewPath = "D:\Program\WinYotuTubeMusic\combined_icon.png"
+$basePath = "$PSScriptRoot\microsoft.png"
+$ytmPath = "$PSScriptRoot\ytmusic.png"
+$outputPath = "$PSScriptRoot\ytmusic.ico"
+$previewPath = "$PSScriptRoot\combined_icon.png"
 
 $base = [System.Drawing.Bitmap]::FromFile($basePath)
 $ytm = [System.Drawing.Bitmap]::FromFile($ytmPath)

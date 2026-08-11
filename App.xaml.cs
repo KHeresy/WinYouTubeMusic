@@ -1,6 +1,6 @@
 using System.Windows;
 
-namespace WinYotuTubeMusic
+namespace WinYouTubeMusic
 {
     public partial class App : Application
     {

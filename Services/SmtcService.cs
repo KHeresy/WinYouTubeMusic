@@ -4,27 +4,27 @@ using System.Net.Http;
 using System.Threading.Tasks;
 using Windows.Media;
 using Windows.Storage.Streams;
-using WinRT.Interop;
 
-namespace WinYotuTubeMusic.Services;
+namespace WinYouTubeMusic.Services;
 
 public class SmtcService
 {
     private readonly SystemMediaTransportControls _smtc;
-    private readonly HttpClient _httpClient = new HttpClient();
-    private readonly Action<string> _sendCommand;
+    private readonly Action<string> _commandHandler;
+    private readonly HttpClient _httpClient;
 
-    public SmtcService(IntPtr hwnd, Action<string> sendCommand)
+    public SmtcService(IntPtr hwnd, Action<string> commandHandler)
     {
-        _sendCommand = sendCommand;
+        _commandHandler = commandHandler;
+        _httpClient = new HttpClient();
 
-        // Get SMTC for window
+        // Get SMTC instance bound to window handle
         _smtc = SystemMediaTransportControlsInterop.GetForWindow(hwnd);
+        _smtc.IsEnabled = true;
         _smtc.IsPlayEnabled = true;
         _smtc.IsPauseEnabled = true;
         _smtc.IsNextEnabled = true;
         _smtc.IsPreviousEnabled = true;
-        _smtc.IsEnabled = true;
 
         _smtc.ButtonPressed += Smtc_ButtonPressed;
     }
@@ -35,45 +35,46 @@ public class SmtcService
         {
             case SystemMediaTransportControlsButton.Play:
             case SystemMediaTransportControlsButton.Pause:
-                _sendCommand("playPause");
+                _commandHandler("playPause");
                 break;
             case SystemMediaTransportControlsButton.Next:
-                _sendCommand("next");
+                _commandHandler("next");
                 break;
             case SystemMediaTransportControlsButton.Previous:
-                _sendCommand("previous");
+                _commandHandler("previous");
                 break;
         }
     }
 
     public async Task UpdateMetadataAsync(string title, string artist, string artworkUrl, bool isPlaying)
     {
-        _smtc.PlaybackStatus = isPlaying ? MediaPlaybackStatus.Playing : MediaPlaybackStatus.Paused;
-
-        var updater = _smtc.DisplayUpdater;
-        updater.Type = MediaPlaybackType.Music;
-        updater.MusicProperties.Title = title;
-        updater.MusicProperties.Artist = artist;
-
-        if (!string.IsNullOrEmpty(artworkUrl))
+        try
         {
-            try
-            {
-                byte[] bytes = await _httpClient.GetByteArrayAsync(artworkUrl);
-                InMemoryRandomAccessStream stream = new InMemoryRandomAccessStream();
-                DataWriter writer = new DataWriter(stream.GetOutputStreamAt(0));
-                writer.WriteBytes(bytes);
-                await writer.StoreAsync();
-                await writer.FlushAsync();
+            _smtc.PlaybackStatus = isPlaying ? MediaPlaybackStatus.Playing : MediaPlaybackStatus.Paused;
 
-                updater.Thumbnail = RandomAccessStreamReference.CreateFromStream(stream);
-            }
-            catch
+            var updater = _smtc.DisplayUpdater;
+            updater.Type = MediaPlaybackType.Music;
+            updater.MusicProperties.Title = title;
+            updater.MusicProperties.Artist = artist;
+
+            if (!string.IsNullOrWhiteSpace(artworkUrl))
             {
-                // Fallback if image download fails
+                try
+                {
+                    byte[] imageBytes = await _httpClient.GetByteArrayAsync(artworkUrl);
+                    var stream = new InMemoryRandomAccessStream();
+                    using (var writer = new DataWriter(stream.GetOutputStreamAt(0)))
+                    {
+                        writer.WriteBytes(imageBytes);
+                        await writer.StoreAsync();
+                    }
+                    updater.Thumbnail = RandomAccessStreamReference.CreateFromStream(stream);
+                }
+                catch { }
             }
+
+            updater.Update();
         }
-
-        updater.Update();
+        catch { }
     }
 }
