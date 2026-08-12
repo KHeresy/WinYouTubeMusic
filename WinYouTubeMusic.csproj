@@ -9,6 +9,12 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>ytmusic.ico</ApplicationIcon>
   </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="WinUI3\**" />
+    <EmbeddedResource Remove="WinUI3\**" />
+    <None Remove="WinUI3\**" />
+    <Page Remove="WinUI3\**" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2903.40" />

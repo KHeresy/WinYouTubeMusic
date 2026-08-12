@@ -36,16 +36,10 @@
 
 ---
 
-## 🚀 執行與建置 (Build & Run)
+## 🚀 建置 (Build)
 
-### 執行應用程式
-直接開啟建置完成的執行檔：
-```cmd
-D:\Program\WinYotuTubeMusic\bin\Debug\net10.0-windows10.0.19041.0\WinYouTubeMusic.exe
-```
-
-### 原始碼建置
 在專案根目錄開啟 Powershell 或 Terminal 執行：
+
 ```powershell
 # 建置專案
 dotnet build
