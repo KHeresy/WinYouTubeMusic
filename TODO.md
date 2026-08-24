@@ -1,23 +1,16 @@
 # WinYouTubeMusic 待辦事項與未來優化規劃 (TODO List)
 
-## 📌 優先推進行項目 (Priority Items)
+## 📌 已完成項目 (Completed)
 
-### 1. 單一實例與多視窗共用 Session / Cookie 機制 (Single-Instance & Multi-Window Cookie Sharing)
-
-* **問題背景 (Background)**：
-  Chromium (WebView2) 引擎為了保護資料庫結構不損壞，規定同一個 Profile 資料夾 (`%LOCALAPPDATA%\WinYouTubeMusic\WebViewData`) 只能被單一主程序 (Master Process) 獨佔鎖定。當開啟第二個程式實例 (`WinYouTubeMusic.exe #2`) 時，第二個實例因遭遇 `0x800700AA (資源正在使用中)` 檔案鎖定，會切換至備援檔，導致第二個實例無法共用第一個實例的 Google 登入 Cookie。
-
-* **最佳解決方案 (Proposed Solution)**：
-  1. **單一實例檢測與喚醒 (Single-Instance Mutex Activation)**：
-     - 使用 Win32 `Mutex` (或 `EventWaitHandle`) 檢測是否有已在執行的主程式實例。
-     - 當使用者雙擊開啟第二個 `.exe` 實例時，第二實例會發送 Win32 通訊訊息（如 `WM_COPYDATA` 或 `SetForegroundWindow`），自動喚醒並將已有登入狀態的主視窗拉至最前階置頂。
-  2. **同程序多視窗共享環境 (Shared Environment Multi-Window)**：
-     - 若使用者需要在桌面同時開立多個 YouTube Music 視窗，改為在**同一個程序 (Process)** 內實作多視窗。
-     - 所有視窗共享同一個 `CoreWebView2Environment` 實例，確保所有開立的視窗都能 100% 即時共用登入狀態與播放 Session。
+- [x] **SMTC 與 AppUserModelID 整合**：解決 Windows 快捷控制中心（`Win + A`）顯示「未知的應用程式」問題，正確顯示應用程式名稱與圖示。
+- [x] **DWM 原生自訂縮圖 (Iconic Thumbnail)**：懸停工作列時直接顯示高畫質專輯封面大圖。
+- [x] **單一實例與 IPC 喚醒 (Single-Instance Mutex & Named Pipe IPC)**：使用 Mutex 與 Named Pipe 避免多開衝突，確保 Cookie 正常運作並支援外部參數喚醒主視窗。
+- [x] **工作列右鍵跳躍清單 (Taskbar Jump List)**：支援「播放清單」與「最近播放」雙分類，並支援 Windows 原生釘選（Pin）與即時點選播放。
 
 ---
 
 ## 💡 未來擴充規劃 (Future Enhancements)
 
-- [ ] **全域快捷鍵 (Global Hotkeys)**：支援在背景或遊戲中直接透過快捷鍵切換曲目與暫停。
-- [ ] **系統托盤最小化 (Minimize to System Tray)**：關閉或最小化視窗時常駐於 Windows 11 右下角托盤區背景播放。
+- [ ] **全域快捷鍵 (Global Hotkeys)**：支援在背景或全螢幕遊戲中直接透過自訂組合鍵切換曲目、暫停或調整音量。
+- [ ] **系統托盤最小化 (Minimize to System Tray)**：關閉或最小化視窗時常駐於 Windows 11 右下角系統匣托盤區背景播放。
+- [ ] **桌面歌詞顯示 (Desktop Lyrics)**：支援浮動桌面歌詞顯示。

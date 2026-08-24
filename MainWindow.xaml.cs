@@ -38,6 +38,14 @@ namespace WinYouTubeMusic
         [DllImport("gdi32.dll")]
         private static extern bool DeleteObject(IntPtr hObject);
 
+        [DllImport("user32.dll")]
+        private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+        private const int SW_RESTORE = 9;
+
         private const int DWMWA_FORCE_ICONIC_REPRESENTATION = 7;
         private const int DWMWA_HAS_ICONIC_BITMAP = 10;
         private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
@@ -215,6 +223,57 @@ namespace WinYouTubeMusic
             }
         }
 
+        public void BringWindowToFront()
+        {
+            Dispatcher.Invoke(() =>
+            {
+                try
+                {
+                    if (WindowState == WindowState.Minimized)
+                    {
+                        WindowState = WindowState.Normal;
+                    }
+                    if (_hwnd != IntPtr.Zero)
+                    {
+                        ShowWindow(_hwnd, SW_RESTORE);
+                        SetForegroundWindow(_hwnd);
+                    }
+                    Activate();
+                    Focus();
+                }
+                catch { }
+            });
+        }
+
+        public void NavigateToUrl(string url)
+        {
+            Dispatcher.InvokeAsync(() =>
+            {
+                try
+                {
+                    if (Uri.TryCreate(url, UriKind.Absolute, out var uri) &&
+                        (uri.Host.Contains("youtube.com") || uri.Host.Contains("youtu.be")))
+                    {
+                        LogWebView("Navigating to URL via JumpList/IPC: " + url);
+                        if (YtmWebView.CoreWebView2 != null)
+                        {
+                            YtmWebView.CoreWebView2.Navigate(url);
+                        }
+                        else
+                        {
+                            YtmWebView.Source = uri;
+                        }
+
+                        BringWindowToFront();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    LogWebView("NavigateToUrl error: " + ex.Message);
+                }
+            });
+        }
+
         private async Task InitializeWebViewAsync()
         {
             try
@@ -223,7 +282,7 @@ namespace WinYouTubeMusic
                 Directory.CreateDirectory(userFolder);
 
                 var options = new CoreWebView2EnvironmentOptions();
-                options.AdditionalBrowserArguments = "--disable-gpu --disable-gpu-compositing --disable-features=HardwareMediaKeyHandling";
+                options.AdditionalBrowserArguments = "--disable-gpu --disable-gpu-compositing --disable-features=HardwareMediaKeyHandling --autoplay-policy=no-user-gesture-required";
 
                 CoreWebView2Environment? env = null;
                 int retries = 3;
@@ -274,8 +333,9 @@ namespace WinYouTubeMusic
 
                 await YtmWebView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(scriptContent);
 
-                LogWebView("Setting YtmWebView.Source = https://music.youtube.com/ ...");
-                YtmWebView.Source = new Uri("https://music.youtube.com/");
+                string initialUrl = App.InitialUrl ?? "https://music.youtube.com/";
+                LogWebView($"Setting YtmWebView.Source = {initialUrl} ...");
+                YtmWebView.Source = new Uri(initialUrl);
             }
             catch (Exception ex)
             {
@@ -309,6 +369,16 @@ namespace WinYouTubeMusic
                     string artwork = root.GetProperty("artwork").GetString() ?? "";
                     bool isPlaying = root.GetProperty("isPlaying").GetBoolean();
 
+                    string url = "";
+                    if (root.TryGetProperty("url", out var urlEl))
+                    {
+                        url = urlEl.GetString() ?? "";
+                    }
+                    if (string.IsNullOrWhiteSpace(url) && YtmWebView.Source != null)
+                    {
+                        url = YtmWebView.Source.ToString();
+                    }
+
                     _isPlaying = isPlaying;
 
                     if (!string.IsNullOrWhiteSpace(title))
@@ -326,6 +396,24 @@ namespace WinYouTubeMusic
                     }
 
                     UpdateTaskbarPlayIcon(isPlaying);
+
+                    // Add to JumpList recent tracks
+                    if (!string.IsNullOrWhiteSpace(title) && !string.IsNullOrWhiteSpace(url))
+                    {
+                        JumpListService.AddTrack(title, artist, url);
+                    }
+
+                    // Add to JumpList playlists if playlist info is present
+                    if (root.TryGetProperty("playlistTitle", out var pTitleEl) &&
+                        root.TryGetProperty("playlistUrl", out var pUrlEl))
+                    {
+                        string pTitle = pTitleEl.GetString() ?? "";
+                        string pUrl = pUrlEl.GetString() ?? "";
+                        if (!string.IsNullOrWhiteSpace(pTitle) && !string.IsNullOrWhiteSpace(pUrl))
+                        {
+                            JumpListService.AddPlaylist(pTitle, "播放清單", pUrl);
+                        }
+                    }
 
                     // Update DWM Taskbar iconic thumbnail with the downloaded artwork
                     if (!string.IsNullOrWhiteSpace(artwork) && artwork != _currentArtworkUrl)
@@ -356,6 +444,15 @@ namespace WinYouTubeMusic
                                 LogWebView("Download artwork error: " + ex.Message);
                             }
                         });
+                    }
+                }
+                else if (root.TryGetProperty("type", out var typeDisc) && typeDisc.GetString() == "playlistDiscovered")
+                {
+                    string pTitle = root.GetProperty("playlistTitle").GetString() ?? "";
+                    string pUrl = root.GetProperty("playlistUrl").GetString() ?? "";
+                    if (!string.IsNullOrWhiteSpace(pTitle) && !string.IsNullOrWhiteSpace(pUrl))
+                    {
+                        JumpListService.AddPlaylist(pTitle, "播放清單", pUrl);
                     }
                 }
             }
@@ -414,7 +511,8 @@ namespace WinYouTubeMusic
 (function () {
     if (window.__ytmInjected) return;
     window.__ytmInjected = true;
-    function getTrackInfo() {
+
+    function getTrackAndPlaylistInfo() {
         let title = ''; let artist = ''; let album = ''; let artwork = ''; let isPlaying = false;
         if (navigator.mediaSession && navigator.mediaSession.metadata) {
             title = navigator.mediaSession.metadata.title || '';
@@ -430,17 +528,115 @@ namespace WinYouTubeMusic
         const btn = document.querySelector('#play-pause-button') || document.querySelector('.play-pause-button');
         if (btn) { const l = btn.getAttribute('title') || btn.getAttribute('aria-label') || ''; isPlaying = l.toLowerCase().includes('pause') || l.includes('暫停'); }
         else { const v = document.querySelector('video'); if (v) isPlaying = !v.paused; }
-        return { type: 'trackChange', title: title.trim(), artist: artist.trim(), album: album.trim(), artwork: artwork, isPlaying: isPlaying };
+
+        let videoId = '';
+        let playlistId = '';
+        let playlistTitle = '';
+
+        try {
+            const player = document.getElementById('movie_player') || (document.querySelector('ytmusic-player') && document.querySelector('ytmusic-player').player_);
+            if (player) {
+                if (typeof player.getVideoData === 'function') {
+                    const data = player.getVideoData();
+                    if (data) {
+                        videoId = data.video_id || '';
+                        if (data.list) playlistId = data.list;
+                    }
+                }
+                if (!playlistId && typeof player.getPlaylistId === 'function') {
+                    playlistId = player.getPlaylistId() || '';
+                }
+            }
+        } catch (e) {}
+
+        if (!playlistId && window.location.search) {
+            const match = window.location.search.match(/[?&]list=([^&]+)/);
+            if (match) playlistId = match[1];
+        }
+
+        try {
+            const queueHeader = document.querySelector('ytmusic-player-page #header .title') ||
+                                document.querySelector('ytmusic-queue-header-renderer .title') ||
+                                document.querySelector('.queue-title');
+            if (queueHeader && queueHeader.innerText) {
+                playlistTitle = queueHeader.innerText.trim();
+            }
+        } catch (e) {}
+
+        if (!playlistTitle && album) {
+            playlistTitle = album.trim();
+        }
+
+        if (!playlistTitle) {
+            try {
+                const albumLink = document.querySelector('ytmusic-player-bar .subtitle a[href*=""list=""]') ||
+                                  document.querySelector('ytmusic-player-bar .subtitle a[href*=""browse/""]') ||
+                                  document.querySelector('ytmusic-player-bar .byline a[href*=""browse/""]');
+                if (albumLink && albumLink.innerText) {
+                    playlistTitle = albumLink.innerText.trim();
+                }
+            } catch (e) {}
+        }
+
+        let trackUrl = '';
+        if (videoId) {
+            trackUrl = 'https://music.youtube.com/watch?v=' + videoId + (playlistId ? '&list=' + playlistId : '');
+        } else if (window.location.href && window.location.href.includes('watch?v=')) {
+            trackUrl = window.location.href;
+        }
+
+        let playlistUrl = '';
+        if (playlistId) {
+            playlistUrl = 'https://music.youtube.com/watch?list=' + playlistId;
+        }
+
+        return {
+            type: 'trackChange',
+            title: title.trim(),
+            artist: artist.trim(),
+            album: album.trim(),
+            artwork: artwork,
+            isPlaying: isPlaying,
+            url: trackUrl,
+            playlistId: playlistId,
+            playlistTitle: playlistTitle,
+            playlistUrl: playlistUrl
+        };
     }
+
+    function checkPlaylistPage() {
+        try {
+            if (window.location.pathname.includes('/playlist') && window.location.search.includes('list=')) {
+                const listMatch = window.location.search.match(/[?&]list=([^&]+)/);
+                const pId = listMatch ? listMatch[1] : '';
+                const titleEl = document.querySelector('ytmusic-responsive-header-renderer .title') ||
+                                document.querySelector('ytmusic-header-renderer .title') ||
+                                document.querySelector('h1.title') ||
+                                document.querySelector('.title.ytmusic-detail-header-renderer');
+                const pTitle = titleEl ? titleEl.innerText.trim() : '';
+                if (pId && pTitle && window.chrome && window.chrome.webview) {
+                    window.chrome.webview.postMessage({
+                        type: 'playlistDiscovered',
+                        playlistId: pId,
+                        playlistTitle: pTitle,
+                        playlistUrl: 'https://music.youtube.com/watch?list=' + pId
+                    });
+                }
+            }
+        } catch (e) {}
+    }
+
     let lastData = '';
     setInterval(function() {
-        const info = getTrackInfo();
+        const info = getTrackAndPlaylistInfo();
         const str = JSON.stringify(info);
         if (str !== lastData) {
             lastData = str;
             if (window.chrome && window.chrome.webview) { window.chrome.webview.postMessage(info); }
         }
+        checkPlaylistPage();
     }, 500);
+
     window.__ytmCommand = function (cmd) {
         if (cmd === 'playPause') {
             const btn = document.querySelector('#play-pause-button') || document.querySelector('.play-pause-button');
