@@ -8,6 +8,12 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>ytmusic.ico</ApplicationIcon>
+    <Title>YouTube Music</Title>
+    <Product>YouTube Music</Product>
+    <Description>YouTube Music Desktop</Description>
+    <Company>KHeresy</Company>
+    <AssemblyTitle>YouTube Music</AssemblyTitle>
+    <AssemblyProduct>YouTube Music</AssemblyProduct>
   </PropertyGroup>
   <ItemGroup>
     <Compile Remove="WinUI3\**" />
@@ -18,11 +24,13 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2903.40" />
-    <PackageReference Include="System.Drawing.Common" Version="9.0.2" />
   </ItemGroup>
 
   <ItemGroup>
     <Resource Include="ytmusic.ico" />
+    <None Update="ytmusic.ico">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
   <ItemGroup>

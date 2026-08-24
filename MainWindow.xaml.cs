@@ -21,10 +21,28 @@ namespace WinYouTubeMusic
         private bool _isPlaying = false;
         private static bool _enableLog = false;
 
+        private readonly HttpClient _httpClient = new HttpClient();
+        private readonly object _artworkLock = new object();
+        private System.Drawing.Bitmap? _currentArtworkBitmap;
+        private string _currentArtworkUrl = "";
+
         [DllImport("dwmapi.dll")]
         private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
 
+        [DllImport("dwmapi.dll")]
+        private static extern int DwmSetIconicThumbnail(IntPtr hwnd, IntPtr hbmp, uint dwSITFlags);
+
+        [DllImport("dwmapi.dll")]
+        private static extern int DwmInvalidateIconicBitmaps(IntPtr hwnd);
+
+        [DllImport("gdi32.dll")]
+        private static extern bool DeleteObject(IntPtr hObject);
+
+        private const int DWMWA_FORCE_ICONIC_REPRESENTATION = 7;
+        private const int DWMWA_HAS_ICONIC_BITMAP = 10;
         private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
+
+        private const int WM_DWMSENDICONICTHUMBNAIL = 0x0323;
 
         public MainWindow()
         {
@@ -61,6 +79,15 @@ namespace WinYouTubeMusic
             int useDarkMode = 1;
             DwmSetWindowAttribute(_hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref useDarkMode, sizeof(int));
 
+            // Enable DWM Custom Iconic Thumbnail (Album Artwork on Taskbar Hover)
+            int forceIconic = 1;
+            int hasIconicBitmap = 1;
+            DwmSetWindowAttribute(_hwnd, DWMWA_FORCE_ICONIC_REPRESENTATION, ref forceIconic, sizeof(int));
+            DwmSetWindowAttribute(_hwnd, DWMWA_HAS_ICONIC_BITMAP, ref hasIconicBitmap, sizeof(int));
+
+            HwndSource source = (HwndSource)PresentationSource.FromVisual(this);
+            source?.AddHook(WndProc);
+
             // Initialize SMTC
             try
             {
@@ -73,6 +100,91 @@ namespace WinYouTubeMusic
 
             // Initialize WebView2 & Navigate
             _ = InitializeWebViewAsync();
+        }
+
+        private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+        {
+            if (msg == WM_DWMSENDICONICTHUMBNAIL)
+            {
+                int maxWidth = (int)(((long)lParam >> 16) & 0xFFFF);
+                int maxHeight = (int)((long)lParam & 0xFFFF);
+
+                IntPtr hBmp = CreateThumbnailHBitmap(maxWidth, maxHeight);
+                if (hBmp != IntPtr.Zero)
+                {
+                    DwmSetIconicThumbnail(hwnd, hBmp, 0);
+                    DeleteObject(hBmp);
+                }
+                handled = true;
+                return IntPtr.Zero;
+            }
+
+            return IntPtr.Zero;
+        }
+
+        private IntPtr CreateThumbnailHBitmap(int maxWidth, int maxHeight)
+        {
+            try
+            {
+                if (maxWidth <= 0 || maxHeight <= 0) return IntPtr.Zero;
+
+                System.Drawing.Bitmap? source = null;
+                lock (_artworkLock)
+                {
+                    if (_currentArtworkBitmap != null)
+                    {
+                        source = (System.Drawing.Bitmap)_currentArtworkBitmap.Clone();
+                    }
+                }
+
+                source ??= GetDefaultCoverBitmap();
+
+                using (source)
+                {
+                    double scale = Math.Min((double)maxWidth / source.Width, (double)maxHeight / source.Height);
+                    int destWidth = Math.Max(1, (int)(source.Width * scale));
+                    int destHeight = Math.Max(1, (int)(source.Height * scale));
+
+                    using var targetBitmap = new System.Drawing.Bitmap(destWidth, destHeight, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+                    using (var g = System.Drawing.Graphics.FromImage(targetBitmap))
+                    {
+                        g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                        g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.HighQuality;
+                        g.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
+                        g.CompositingQuality = System.Drawing.Drawing2D.CompositingQuality.HighQuality;
+                        g.Clear(System.Drawing.Color.FromArgb(15, 15, 15));
+                        g.DrawImage(source, 0, 0, destWidth, destHeight);
+                    }
+
+                    return targetBitmap.GetHbitmap();
+                }
+            }
+            catch (Exception ex)
+            {
+                LogWebView("CreateThumbnailHBitmap error: " + ex.Message);
+                return IntPtr.Zero;
+            }
+        }
+
+        private System.Drawing.Bitmap GetDefaultCoverBitmap()
+        {
+            try
+            {
+                string iconPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ytmusic.ico");
+                if (File.Exists(iconPath))
+                {
+                    using var icon = new System.Drawing.Icon(iconPath, 256, 256);
+                    return icon.ToBitmap();
+                }
+            }
+            catch { }
+
+            var bmp = new System.Drawing.Bitmap(200, 200, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+            using (var g = System.Drawing.Graphics.FromImage(bmp))
+            {
+                g.Clear(System.Drawing.Color.FromArgb(15, 15, 15));
+            }
+            return bmp;
         }
 
         private void InitTaskbarThumbIcons()
@@ -111,7 +223,7 @@ namespace WinYouTubeMusic
                 Directory.CreateDirectory(userFolder);
 
                 var options = new CoreWebView2EnvironmentOptions();
-                options.AdditionalBrowserArguments = "--disable-gpu --disable-gpu-compositing";
+                options.AdditionalBrowserArguments = "--disable-gpu --disable-gpu-compositing --disable-features=HardwareMediaKeyHandling";
 
                 CoreWebView2Environment? env = null;
                 int retries = 3;
@@ -215,36 +327,35 @@ namespace WinYouTubeMusic
 
                     UpdateTaskbarPlayIcon(isPlaying);
 
-                    // Dynamically calculate window-relative Taskbar thumbnail clip bounds
-                    if (root.TryGetProperty("bounds", out var boundsEl) && boundsEl.ValueKind == JsonValueKind.Object)
+                    // Update DWM Taskbar iconic thumbnail with the downloaded artwork
+                    if (!string.IsNullOrWhiteSpace(artwork) && artwork != _currentArtworkUrl)
                     {
-                        try
+                        _currentArtworkUrl = artwork;
+                        _ = Task.Run(async () =>
                         {
-                            double bLeft = boundsEl.GetProperty("left").GetDouble();
-                            double bTop = boundsEl.GetProperty("top").GetDouble();
-                            double bWidth = boundsEl.GetProperty("width").GetDouble();
-                            double bHeight = boundsEl.GetProperty("height").GetDouble();
-
-                            if (bWidth > 20 && bHeight > 20)
+                            try
                             {
+                                byte[] bytes = await _httpClient.GetByteArrayAsync(artwork);
+                                using var ms = new MemoryStream(bytes);
+                                var bmp = new System.Drawing.Bitmap(ms);
+                                lock (_artworkLock)
+                                {
+                                    _currentArtworkBitmap?.Dispose();
+                                    _currentArtworkBitmap = bmp;
+                                }
                                 Dispatcher.Invoke(() =>
                                 {
-                                    try
+                                    if (_hwnd != IntPtr.Zero)
                                     {
-                                        Point webViewOffset = YtmWebView.TransformToAncestor(this).Transform(new Point(0, 0));
-                                        double absLeft = webViewOffset.X + bLeft;
-                                        double absTop = webViewOffset.Y + bTop;
-                                        double absRight = Math.Max(0, this.ActualWidth - (absLeft + bWidth));
-                                        double absBottom = Math.Max(0, this.ActualHeight - (absTop + bHeight));
-
-                                        TaskbarInfo.ThumbnailClipMargin = new Thickness(absLeft, absTop, absRight, absBottom);
-                                        LogWebView($"TaskbarInfo.ThumbnailClipMargin set to: {TaskbarInfo.ThumbnailClipMargin}");
+                                        DwmInvalidateIconicBitmaps(_hwnd);
                                     }
-                                    catch { }
                                 });
                             }
-                        }
-                        catch { }
+                            catch (Exception ex)
+                            {
+                                LogWebView("Download artwork error: " + ex.Message);
+                            }
+                        });
                     }
                 }
             }
@@ -315,7 +426,7 @@ namespace WinYouTubeMusic
         }
         if (!title) { const el = document.querySelector('.title.style-scope.ytmusic-player-bar'); title = el ? el.innerText : ''; }
         if (!artist) { const el = document.querySelector('.byline.style-scope.ytmusic-player-bar'); artist = el ? el.innerText : ''; }
-        if (!artwork) { const el = document.querySelector('.image.style-scope.ytmusic-player-bar'); artwork = el ? el.src : ''; }
+        if (!artwork) { const el = document.querySelector('.image.style-scope.ytmusic-player-bar') || document.querySelector('ytmusic-player-bar img'); artwork = el ? el.src : ''; }
         const btn = document.querySelector('#play-pause-button') || document.querySelector('.play-pause-button');
         if (btn) { const l = btn.getAttribute('title') || btn.getAttribute('aria-label') || ''; isPlaying = l.toLowerCase().includes('pause') || l.includes('暫停'); }
         else { const v = document.querySelector('video'); if (v) isPlaying = !v.paused; }
