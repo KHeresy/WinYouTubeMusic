@@ -1,62 +1,71 @@
-# YouTube Music for Windows 11 (WinYouTubeMusic)
+# YouTube Music for Windows (WinYouTubeMusic)
 
-專為 Windows 11 / 10 設計的 **YouTube Music** 原生桌面應用程式，結合高效能 .NET 10 與 WPF WebView2 技術，具備深度 Windows 系統媒體控制卡片（SMTC）、工作列右鍵跳躍清單（Jump List）與 DWM 原生縮圖整合。
+[English](README.md) | [繁體中文](README.zh-TW.md)
 
----
-
-## 🌟 核心特色 (Features)
-
-1. **工作列右鍵跳躍清單與曲目/清單釘選 (Taskbar Jump List & Pinning)**
-   - **雙分類支援**：
-     - 📋 **「播放清單」**：自動記錄最近播放或瀏覽的播放清單、專輯、歌手電台。
-     - 🎵 **「最近播放」**：自動記錄最近播放的單曲歷史（保留播放隊列參數）。
-   - **Windows 原生釘選 (Pinning)**：
-     - 懸停於右鍵選單項目點擊圖釘圖示，即可將喜愛的清單或曲目固定在最上方的「**已釘選**」分類，永不被新曲目洗掉。
-   - **單一實例 IPC 無縫播放**：
-     - 點擊 Jump List 項目時，若程式已在執行，會透過 Named Pipe 直接通知主視窗跳轉播放並喚醒置前，不會開啟重複視窗。
-
-2. **工作列懸停專輯封面縮圖 (DWM Iconic Thumbnail)**
-   - 使用 Windows 桌面視窗管理員（DWM）原生的 `DwmSetIconicThumbnail` 技術。
-   - 滑鼠游標懸停於工作列圖示時，直接以高畫質呈現當前播放曲目的專輯封面大圖，取代傳統模糊的視窗縮圖。
-   - **工作列多媒體控制按鈕**：縮圖下方具備 `⏮ 上一首`、`▶/⏸ 播放/暫停`、`⏭ 下一首` 向量控制按鈕。
-
-3. **Windows 系統媒體傳輸控制 (System Media Transport Controls - SMTC)**
-   - 完整註冊 **AppUserModelID (AUMID)**，在 Windows 快捷控制中心（`Win + A`）與音量彈出視窗中正確顯示應用程式名稱「**YouTube Music**」與專屬圖示，不再顯示「未知的應用程式」。
-   - 🎵 即時顯示**歌曲名稱 (Title)**、🎤 **歌手名稱 (Artist)**、🖼️ **高畫質封面 (Album Art)**。
-   - ⏯️ 完整支援鍵盤硬體多媒體鍵（Play, Pause, Next, Previous）控制。
-
-4. **單一實例管理 (Single Instance Management)**
-   - 使用系統級 `Mutex` 與 `NamedPipeServerStream` / `NamedPipeClientStream`。
-   - 解決 Chromium WebView2 設定檔鎖定問題，確保 Google 帳號登入狀態與 Cookie 持久穩定。
-
-5. **現代化 Windows 11 視覺介面**
-   - **Immersive Dark Mode**：Windows 11 原生深色標題列與介面風格。
-   - **自動播放最佳化**：內建 `--autoplay-policy=no-user-gesture-required`，點選清單或曲目即刻自動播放。
+A lightweight, native **YouTube Music** desktop application designed for Windows 11 & 10. Built with **.NET 10** and **WPF WebView2**, it deeply integrates with the Windows ecosystem, featuring System Media Transport Controls (SMTC), Taskbar Jump Lists with pinning, and native DWM album art previews.
 
 ---
 
-## 💻 系統需求 (System Requirements)
+## 🌟 Key Features
 
-- **作業系統**：Windows 11 / Windows 10 (x64 / ARM64)
-- **執行階段**：.NET 10.0 Windows Desktop Runtime
-- **瀏覽器元件**：Microsoft Edge WebView2 Runtime（Windows 11 已預裝）
+1. **Taskbar Jump List & Pinning**
+   - **Dual Categories**:
+     - 📋 **Playlists**: Automatically tracks recently played or browsed playlists, albums, and artist radios.
+     - 🎵 **Recent Tracks**: Keeps a history of recently played tracks while preserving playlist queue context (`&list=...`).
+   - **Native Windows Pinning**:
+     - Hover over any item in the Jump List and click the pin icon to pin your favorite playlists or songs to the top **Pinned** section.
+   - **Seamless Single-Instance Playback**:
+     - Clicking a Jump List item forwards the URL via a Named Pipe IPC to the active window and brings it to the front without opening duplicate processes.
+
+2. **DWM Iconic Thumbnail (Album Art Hover Preview)**
+   - Utilizes the native Desktop Window Manager (`DwmSetIconicThumbnail`) API.
+   - Hovering over the taskbar icon displays a crisp, full-sized album artwork preview instead of a scaled-down web page preview.
+   - **Taskbar Thumbnail Toolbar**: Integrated media control buttons below the thumbnail:
+     - `⏮ Previous Track`
+     - `▶ / ⏸ Play / Pause` (dynamically updates based on playback state)
+     - `⏭ Next Track`
+
+3. **Windows 11 System Media Transport Controls (SMTC)**
+   - Full **AppUserModelID (AUMID)** registration ensures the Windows Quick Settings media panel (`Win + A`) and volume flyouts cleanly identify the app as **"YouTube Music"** with its official icon (no more "Unknown application").
+   - 🎵 Real-time **Track Title** & 🎤 **Artist Name** display.
+   - 🖼️ High-resolution **Album Artwork** downloading and rendering.
+   - ⏯️ Full hardware media keys support (Play, Pause, Next, Previous).
+
+4. **Single-Instance Management & Persistent Session**
+   - Uses system-level `Mutex` and asynchronous `NamedPipe` IPC to ensure only one instance handles WebView2 user profile data.
+   - Prevents profile lock errors (`0x800700AA`) and keeps Google / YouTube Music login sessions and cookies persistent and secure.
+
+5. **Modern Windows 11 UI & Playback Optimization**
+   - **Immersive Dark Mode**: Windows 11 native dark window frame and title bar styling.
+   - **Autoplay Optimization**: Pre-configured with `--autoplay-policy=no-user-gesture-required` for instant playback when launching tracks or playlists from shortcuts.
 
 ---
 
-## 🚀 建置與執行 (Build & Run)
+## 💻 System Requirements
 
-在專案根目錄開啟 PowerShell 執行：
+- **Operating System**: Windows 11 / Windows 10 (x64 / ARM64)
+- **Runtime**: .NET 10.0 Windows Desktop Runtime
+- **Web Runtime**: Microsoft Edge WebView2 Runtime (pre-installed on Windows 11)
+
+---
+
+## 🚀 Build & Run
+
+Open PowerShell in the project root directory:
 
 ```powershell
-# 建置專案
+# Build project
 dotnet build
 
-# 執行專案
+# Run application
 dotnet run
+
+# Publish Release build
+dotnet publish -c Release -r win-x64 --no-self-contained -o ./publish
 ```
 
 ---
 
-## 📄 授權說明 (License)
+## 📄 License
 
 MIT License.

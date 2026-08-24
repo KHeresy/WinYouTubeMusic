@@ -3,6 +3,8 @@ obj/
 *.user
 *.log
 .vs/
+publish/
+*.zip
 microsoft.png
 ytmusic.png
 combined_icon.png
