@@ -35,7 +35,8 @@ A lightweight, native **YouTube Music** desktop application designed for Windows
    - Uses system-level `Mutex` and asynchronous `NamedPipe` IPC to ensure only one instance handles WebView2 user profile data.
    - Prevents profile lock errors (`0x800700AA`) and keeps Google / YouTube Music login sessions and cookies persistent and secure.
 
-5. **Modern Windows 11 UI & Playback Optimization**
+5. **Modern Windows 11 UI & State Persistence**
+   - **Window Size & Position Memory**: Automatically persists window coordinates, dimensions, and maximized state across sessions with multi-monitor disconnection protection.
    - **Immersive Dark Mode**: Windows 11 native dark window frame and title bar styling.
    - **Autoplay Optimization**: Pre-configured with `--autoplay-policy=no-user-gesture-required` for instant playback when launching tracks or playlists from shortcuts.
 

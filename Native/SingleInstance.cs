@@ -73,6 +73,24 @@ public static class SingleInstance
         }, _cts.Token);
     }
 
+    public static bool SendToPrimaryInstance(string url)
+    {
+        try
+        {
+            using var client = new NamedPipeClientStream(".", PipeName, PipeDirection.Out);
+            client.Connect(2000);
+            using var writer = new StreamWriter(client, Encoding.UTF8) { AutoFlush = true };
+            writer.WriteLine(url);
+            writer.Flush();
+            client.WaitForPipeDrain();
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     public static async Task<bool> SendToPrimaryInstanceAsync(string url)
     {
         try

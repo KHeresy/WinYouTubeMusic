@@ -31,7 +31,8 @@
    - 使用系統級 `Mutex` 與 `NamedPipeServerStream` / `NamedPipeClientStream`。
    - 解決 Chromium WebView2 設定檔鎖定問題，確保 Google 帳號登入狀態與 Cookie 持久穩定。
 
-5. **現代化 Windows 11 視覺介面**
+5. **現代化 Windows 11 視覺介面與狀態記憶**
+   - **視窗尺寸與位置記憶**：自動記錄上次關閉時的視窗座標、大小與最大化狀態；具備多螢幕防呆機制，若斷開外接螢幕會自動安全置中。
    - **Immersive Dark Mode**：Windows 11 原生深色標題列與介面風格。
    - **自動播放最佳化**：內建 `--autoplay-policy=no-user-gesture-required`，點選清單或曲目即刻自動播放。
 

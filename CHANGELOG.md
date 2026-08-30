@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-08-30
+
+### Added
+- **Window Size, Position & State Persistence**:
+  - Automatically remembers window coordinates (`Left`, `Top`), dimensions (`Width`, `Height`), and maximized state across application restarts.
+  - Multi-monitor safety protection: automatically repositions and centers window on the primary display if disconnected external monitors cause the window to be off-screen.
+  - Gracefully restores from maximized state and avoids starting minimized.
+
+### Fixed
+- **Secondary Instance Jump List Flash Fix**:
+  - Removed implicit WPF `StartupUri` and made secondary instance IPC forwarding completely synchronous before process exit.
+  - Secondary instances launched from Jump List / Pinned items now exit in milliseconds without creating any window or initializing UI.
+
 ## [0.1.0] - 2026-08-24
 
 ### Added

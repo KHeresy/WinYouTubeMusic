@@ -59,9 +59,32 @@ namespace WinYouTubeMusic
             // Check command line args to enable log (default is OFF)
             ParseCommandLineArgs();
 
+            // Restore saved window position, size, and state
+            try
+            {
+                SettingsService.RestoreWindowPlacement(this);
+            }
+            catch (Exception ex)
+            {
+                LogWebView("RestoreWindowPlacement error: " + ex.Message);
+            }
+
             InitTaskbarThumbIcons();
 
             this.Loaded += MainWindow_Loaded;
+            this.Closing += MainWindow_Closing;
+        }
+
+        private void MainWindow_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
+        {
+            try
+            {
+                SettingsService.SaveWindowPlacement(this);
+            }
+            catch (Exception ex)
+            {
+                LogWebView("MainWindow_Closing save window placement error: " + ex.Message);
+            }
         }
 
         private void ParseCommandLineArgs()

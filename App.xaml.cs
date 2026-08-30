@@ -9,16 +9,16 @@ namespace WinYouTubeMusic
     {
         public static string? InitialUrl { get; private set; }
 
-        protected override async void OnStartup(StartupEventArgs e)
+        protected override void OnStartup(StartupEventArgs e)
         {
             // Parse URL from command line if any
             string? url = ParseUrlFromArgs(Environment.GetCommandLineArgs()) ?? ParseUrlFromArgs(e.Args);
 
             if (!SingleInstance.TryAcquire(out bool isPrimary))
             {
-                // Another instance is already running. Forward URL and exit.
-                await SingleInstance.SendToPrimaryInstanceAsync(url ?? "ACTIVATE");
-                Shutdown();
+                // Another instance is already running. Forward URL synchronously and exit immediately without creating any UI.
+                SingleInstance.SendToPrimaryInstance(url ?? "ACTIVATE");
+                Shutdown(0);
                 return;
             }
 
@@ -50,6 +50,11 @@ namespace WinYouTubeMusic
             });
 
             base.OnStartup(e);
+
+            // 4. Create and show MainWindow manually for primary instance
+            var window = new MainWindow();
+            MainWindow = window;
+            window.Show();
         }
 
         protected override void OnExit(ExitEventArgs e)
